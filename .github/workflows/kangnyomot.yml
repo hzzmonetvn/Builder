@@ -158,30 +158,6 @@ jobs:
           
           echo "✅ MamboSU added"
 
-      - name: Patch MamboSU Manager Support
-        working-directory: gki/common
-        run: |
-          set -e
-
-          echo "🔧 Applying MamboSU Manager Support Patch..."
-
-          # Download patch
-          curl -LSs "https://raw.githubusercontent.com/Kingfinik98/gki-builder/15ddb8c469eab27491d5bb0f8f66b7fe2c15d0d7/kernel-patches/ksu/rksu-add-mambosu-manager-support.patch" -o mambosu.patch
-
-          # --- FIX: Edit file patch secara manual (KERNEL/ -> INCLUDE/) ---
-          # Patch mencari kernel/manager_sign.h, tapi aslinya ada di include/manager_sign.h
-          # Kita ubah patch-nya sebelum di-apply
-          sed -i 's|a/kernel/manager_sign.h|a/include/manager_sign.h|g' mambosu.patch
-          sed -i 's|b/kernel/manager_sign.h|b/include/manager_sign.h|g' mambosu.patch
-
-          # Apply patch
-          cd KernelSU
-          patch -p1 < ../mambosu.patch
-          cd ..
-
-          rm mambosu.patch
-          echo "✅ MamboSU Manager support successfully patched!"
-
       - name: Apply common fixes
         working-directory: gki/common
         run: |
