@@ -125,7 +125,7 @@ jobs:
       - name: Setup KernelSU-Next & Hook Method
         working-directory: gki/common
         run: |
-          echo "🧩 Setup KernelSU-Next dan Hook Method"
+          echo "🧩 Setup MamboSU Hook Method"
           for KSU_PATH in drivers/staging/kernelsu drivers/kernelsu KernelSU; do
             if [ -d $KSU_PATH ]; then
               echo "KernelSU driver found in $KSU_PATH, Removing..."
@@ -135,7 +135,7 @@ jobs:
               rm -rf $KSU_PATH
             fi
           done
-          echo "✅ Existing KernelSU drivers removed"
+          echo "✅ Existing MamboSU drivers removed"
           echo "➡️ Menambahkan MamboSU"
           curl -LSs "https://raw.githubusercontent.com/RapliVx/KernelSU/refs/heads/susfs-rksu-master/kernel/setup.sh" | bash -s susfs-rksu-master
           echo "✅ MamboSU added"
