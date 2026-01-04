@@ -161,17 +161,35 @@ jobs:
       - name: Patch MamboSU Manager Support
         working-directory: gki/common
         run: |
+          set -e
+
           echo "🔧 Applying MamboSU Manager Support Patch..."
-          # Download patch dari branch 6.x
-          curl -LSs "https://raw.githubusercontent.com/Kingfinik98/gki-builder/refs/heads/6.x/kernel-patches/ksu/rksu-add-mambosu-manager-support.patch" -o mambosu_manager.patch
-          
-          # Masuk ke folder KernelSU untuk apply patch
+
+          # Menggunakan commit hash spesifik sesuai instruksi
+          curl -LSs "https://raw.githubusercontent.com/Kingfinik98/gki-builder/15ddb8c469eab27491d5bb0f8f66b7fe2c15d0d7/kernel-patches/ksu/rksu-add-mambosu-manager-support.patch" -o mambosu.patch
+
           cd KernelSU
-          # TAMBAHKAN FLAG --batch AGAR OTOMATIS TANPA KONFIRMASI (Y/N)
-          patch -p1 --batch < ../mambosu_manager.patch
+
+          # Auto-fix path untuk KernelSU terbaru (kernel/ -> core/)
+          if [ -f core/apk_sign.c ] && [ -f core/manager_sign.h ]; then
+            echo "🔁 Detected KernelSU core/ layout, fixing patch..."
+            sed -i 's|a/kernel/|a/core/|g' ../mambosu.patch
+            sed -i 's|b/kernel/|b/core/|g' ../mambosu.patch
+          fi
+
+          # Pastikan file memang ada sebelum patch
+          ls core/apk_sign.c core/manager_sign.h
+
+          # Test dulu biar gak gagal bodoh
+          patch -p1 --dry-run < ../mambosu.patch
+
+          # Apply real
+          patch -p1 < ../mambosu.patch
+
           cd ..
-          rm mambosu_manager.patch
-          echo "✅ Manager support added (KSU, RKSU, RISSU, MKSU)"
+          rm mambosu.patch
+
+          echo "✅ MamboSU Manager support successfully patched!"
 
       - name: Apply common fixes
         working-directory: gki/common
