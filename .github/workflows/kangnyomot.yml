@@ -122,13 +122,13 @@ jobs:
         run: |
           sed -i '2d' gki/common/build.config.gki
 
-      - name: Setup KernelSU-Next & Hook Method
+      - name: Setup MamboSU & Hook Method
         working-directory: gki/common
         run: |
           echo "🧩 Setup MamboSU Hook Method"
           for KSU_PATH in drivers/staging/kernelsu drivers/kernelsu KernelSU; do
             if [ -d $KSU_PATH ]; then
-              echo "KernelSU driver found in $KSU_PATH, Removing..."
+              echo "MamboSU driver found in $KSU_PATH, Removing..."
               KSU_DIR=$(dirname "$KSU_PATH")
               [ -f "$KSU_DIR/Kconfig" ] && sed -i '/kernelsu/d' $KSU_DIR/Kconfig
               [ -f "$KSU_DIR/Makefile" ] && sed -i '/kernelsu/d' $KSU_DIR/Makefile
@@ -136,26 +136,29 @@ jobs:
             fi
           done
           echo "✅ Existing MamboSU drivers removed"
-          echo "➡️ Menambahkan MamboSU"
-          curl -LSs "https://raw.githubusercontent.com/RapliVx/KernelSU/refs/heads/susfs-rksu-master/kernel/setup.sh" | bash -s susfs-rksu-master
-          echo "✅ MamboSU added"
-          
-          # --- PERBAIKAN: DIHAPUS SED KBUILD KARENA FILE TIDAK ADA ---
           
           HOOK_METHOD="${{ github.event.inputs.hook_method }}"
+          
           if [ "$HOOK_METHOD" = "susfs" ]; then
-            git clone https://gitlab.com/simonpunk/susfs4ksu/ -b gki-android12-5.10 sus
-            rm -rf sus/.git
-            susfs=sus/kernel_patches
-            cp -r $susfs/fs .
-            cp -r $susfs/include .
-            cp -r $susfs/50_add_susfs_in_gki-android12-5.10.patch .
-            patch -p1 < 50_add_susfs_in_gki-android12-5.10.patch
-            echo "[✓] SUSFS patched"
+             echo "➡️ Menambahkan MamboSU (Mode SuSFS)"
+             # PERSIS INSTRUKSI: GUNAKAN VERSI SUSFS-RKSU-MASTER
+             curl -LSs "https://raw.githubusercontent.com/RapliVx/KernelSU/refs/heads/susfs-rksu-master/kernel/setup.sh" | bash -s susfs-rksu-master
+             git clone https://gitlab.com/simonpunk/susfs4ksu/ -b gki-android12-5.10 sus
+             rm -rf sus/.git
+             susfs=sus/kernel_patches
+             cp -r $susfs/fs .
+             cp -r $susfs/include .
+             cp -r $susfs/50_add_susfs_in_gki-android12-5.10.patch .
+             patch -p1 < 50_add_susfs_in_gki-android12-5.10.patch
+             echo "[✓] SUSFS patched"
           else
-            echo "➡️ Menggunakan metode Kprobes Hook"
-            echo "✅ Kprobes setup selesai"
+             echo "➡️ Menambahkan MamboSU (Mode Kprobes)"
+             # PERSIS INSTRUKSI: GUNAKAN VERSI MASTER
+             curl -LSs "https://raw.githubusercontent.com/RapliVx/KernelSU/refs/heads/master/kernel/setup.sh" | bash -s master
+             echo "[✓] Kprobes setup selesai"
           fi
+          
+          echo "✅ MamboSU added"
 
       - name: Apply common fixes
         working-directory: gki/common
