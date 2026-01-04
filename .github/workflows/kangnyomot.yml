@@ -165,21 +165,21 @@ jobs:
 
           echo "🔧 Applying MamboSU Manager Support Patch..."
 
+          # Download patch
           curl -LSs "https://raw.githubusercontent.com/Kingfinik98/gki-builder/15ddb8c469eab27491d5bb0f8f66b7fe2c15d0d7/kernel-patches/ksu/rksu-add-mambosu-manager-support.patch" -o mambosu.patch
 
-          # MASUK KE ROOT KernelSU YANG SEBENARNYA
+          # --- FIX: Edit file patch secara manual (KERNEL/ -> INCLUDE/) ---
+          # Patch mencari kernel/manager_sign.h, tapi aslinya ada di include/manager_sign.h
+          # Kita ubah patch-nya sebelum di-apply
+          sed -i 's|a/kernel/manager_sign.h|a/include/manager_sign.h|g' mambosu.patch
+          sed -i 's|b/kernel/manager_sign.h|b/include/manager_sign.h|g' mambosu.patch
+
+          # Apply patch
           cd KernelSU
-
-          # Pastikan file memang ada di kernel/
-          ls kernel/apk_sign.c
-          ls kernel/manager_sign.h
-
-          # Apply patch (path sudah cocok, JANGAN DIUBAH)
           patch -p1 < ../mambosu.patch
-
           cd ..
-          rm mambosu.patch
 
+          rm mambosu.patch
           echo "✅ MamboSU Manager support successfully patched!"
 
       - name: Apply common fixes
@@ -190,7 +190,7 @@ jobs:
       - name: Fix Stack Protector
         working-directory: gki/common
         run: |
-          echo "🛠️ Applying manual Stack Protector fix "
+          echo "🛠️ Applying manual Stack Protector fix"
           sed -i '/config STACKPROTECTOR_PER_TASK/{n;s/def_bool y/bool "Stack Protector per task"\n\tdefault y/;}' arch/arm64/Kconfig
           echo "# CONFIG_STACKPROTECTOR_PER_TASK is not set" >> arch/arm64/configs/gki_defconfig
           echo "✅ Stack Protector fix applied manually."
