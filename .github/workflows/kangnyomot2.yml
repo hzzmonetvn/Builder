@@ -139,20 +139,16 @@ jobs:
           done
           echo "✅ Existing MamboSU drivers removed"
           
-          # 2. Menentukan Branch dan Clone dari rsuntk/KernelSU
+          # 2. Setup KernelSU sesuai perintah setup.sh yang Anda temukan
           HOOK_METHOD="${{ github.event.inputs.hook_method }}"
-          KSU_BRANCH="main"
           
           if [ "$HOOK_METHOD" = "susfs" ]; then
-             echo "➡️ Menggunakan MamboSU (Mode SuSFS)"
-             KSU_BRANCH="susfs-rksu-master"
+             echo "➡️ Mode: SuSFS (Source: rsuntk/KernelSU/main -> Branch: susfs-rksu-master)"
+             curl -LSs "https://raw.githubusercontent.com/rsuntk/KernelSU/main/kernel/setup.sh" | bash -s susfs-rksu-master
           else
-             echo "➡️ Menggunakan MamboSU (Mode Kprobes/Standard)"
-             KSU_BRANCH="main"
+             echo "➡️ Mode: Kprobes/Rissu (Source: RapliVx/KernelSU/master -> Branch: master)"
+             curl -LSs "https://raw.githubusercontent.com/RapliVx/KernelSU/refs/heads/master/kernel/setup.sh" | bash -s master
           fi
-          
-          echo "Cloning rsuntk/KernelSU branch: $KSU_BRANCH"
-          git clone https://github.com/rsuntk/KernelSU -b $KSU_BRANCH KernelSU
           
           # 3. Apply Manager Support Patch
           echo "🛠️ Applying MamboSU Manager Support Patch..."
@@ -162,7 +158,7 @@ jobs:
           cd ..
           echo "✅ Manager Patch Applied"
           
-          # 4. Apply SusFS (Kernel Side) - Menggunakan Versi YAML Anda (Simonpunk)
+          # 4. Apply SusFS (Kernel Side) - Versi YAML Lama (Simonpunk)
           if [ "$HOOK_METHOD" = "susfs" ]; then
              echo "➡️ Applying SusFS Kernel Patches (Simonpunk)..."
              git clone https://gitlab.com/simonpunk/susfs4ksu/ -b gki-android12-5.10 sus
