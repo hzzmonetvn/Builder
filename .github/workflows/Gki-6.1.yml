@@ -22,7 +22,6 @@ on:
         type: choice
         default: 'r536225 (Clang 19)'
         options:
-          - 'r416183b (Clang 12)'
           - 'r536225 (Clang 19)'
           - 'r547379 (Clang 20)'
       hook_method:
@@ -306,10 +305,8 @@ jobs:
         run: |
           echo "🔨 Setting up Clang..."
           mkdir -p prebuilts-master/clang/host/linux-x86
-          if [ "${{ github.event.inputs.clang_version }}" == "r416183b (Clang 12)" ]; then
-            CLANG_VER="clang-r416183b"
-            CLANG_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android13-release/clang-r416183b.tar.gz"
-          elif [ "${{ github.event.inputs.clang_version }}" == "r536225 (Clang 19)" ]; then
+          
+          if [ "${{ github.event.inputs.clang_version }}" == "r536225 (Clang 19)" ]; then
             CLANG_VER="clang-r536225"
             CLANG_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main-kernel-2025/clang-r536225.tar.gz"
           else
@@ -320,8 +317,10 @@ jobs:
           mkdir -p prebuilts-master/clang/host/linux-x86/$CLANG_VER
           cd prebuilts-master/clang/host/linux-x86
           curl -L "${CLANG_URL}" | tar -xz -C $CLANG_VER
-          rm -rf clang-r416183b
-          ln -sf $CLANG_VER clang-r416183b
+          
+          # Fix symlink: use 'clang' instead of hardcoding 'clang-r416183b'
+          rm -rf clang
+          ln -sf $CLANG_VER clang
 
           echo "🔨 Setting up Bazel..."
           curl -Lo /tmp/bazel https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64
