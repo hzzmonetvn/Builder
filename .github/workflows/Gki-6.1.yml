@@ -57,10 +57,7 @@ jobs:
   build:
     name: Build GKI 6.1
     runs-on: ubuntu-22.04
-    container:
-      image: ubuntu:22.04
-      env:
-        DEBIAN_FRONTEND: noninteractive
+    # Container dihapus agar sudo tersedia untuk maximise-build-space
 
     steps:
       - name: Free disk space
@@ -85,9 +82,9 @@ jobs:
 
       - name: Install Dependencies (Updated from Reference)
         run: |
-          apt-get update
-          # FIX: Menambahkan dwarves, libelf-dev, libncurses5-dev
-          apt-get install -y build-essential bc bison flex libssl-dev git curl \
+          sudo apt-get update
+          # FIX: Tambahkan sudo
+          sudo apt-get install -y build-essential bc bison flex libssl-dev git curl \
           python3 python3-pip lld zip unzip libncurses5-dev rsync \
           cpio schedtool git-core gnupg libelf-dev dwarves openjdk-17-jdk
 
@@ -154,7 +151,7 @@ jobs:
              patch -p1 < /tmp/rksu_manager.patch || echo "Patch manager failed (might be applied already)"
              cd ..
              
-             # Apply SusFS (Simonpunk) Manual Fix (Adopsi dari Referensi)
+             # Apply SusFS (Simonpunk) Manual Fix
              if [ "$HOOK_METHOD" = "susfs" ]; then
                 echo "➡️ Applying SusFS (Simonpunk)..."
                 git clone https://gitlab.com/simonpunk/susfs4ksu/ -b gki-android14-6.1 sus
@@ -162,7 +159,7 @@ jobs:
                 cp -r sus/kernel_patches/include/* include/
                 cp sus/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch .
                 patch -p1 -f -N < 50_add_susfs_in_gki-android14-6.1.patch || echo "Susfs rejects ignored"
-                # Fix conflict fs/proc/base.c (Reference fix)
+                # Fix conflict fs/proc/base.c
                 grep -q "linux/susfs.h" fs/proc/base.c || sed -i '/#include <linux\/fs.h>/a #include <linux/susfs.h>' fs/proc/base.c
                 sed -i '1i#include <linux/stat.h>' include/linux/susfs.h || true
                 rm -rf sus 50_add_susfs_in_gki-android14-6.1.patch fs/proc/base.c.rej
