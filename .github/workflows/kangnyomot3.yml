@@ -1,0 +1,424 @@
+name: BoltX Kernel MamboSU & KernelSU Next (6.1)
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernel_name:
+        description: 'Custom Kernel Name'
+        required: false
+        default: 'GKI'
+        type: string
+      release_status:
+        description: 'Release Status'
+        required: true
+        type: choice
+        default: 'RELEASE'
+        options:
+          - 'RELEASE'
+          - 'BETA'
+      clang_version:
+        description: 'Select Clang Version'
+        required: true
+        type: choice
+        default: 'r536225 (Clang 19)'
+        options:
+          - 'r416183b (Clang 12)'
+          - 'r536225 (Clang 19)'
+          - 'r547379 (Clang 20)'
+      hook_method:
+        description: 'Select Hook Method'
+        required: true
+        type: choice
+        default: 'susfs'
+        options:
+          - 'susfs'
+          - 'kprobes'
+      performance_patch:
+        description: 'Select Device SoC for Performance Tuning'
+        required: true
+        type: choice
+        default: 'Snapdragon'
+        options:
+          - 'Snapdragon'
+          - 'MediaTek'
+          - 'Universal'
+      ksu_type:
+        description: 'Select KernelSU Type'
+        required: true
+        type: choice
+        default: 'MamboSU'
+        options:
+          - 'MamboSU'
+          - 'Next'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build GKI 6.1
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Free disk space
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 8192
+          swap-size-mb: 10240
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          remove-docker-images: 'true'
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "titit"
+          git config --global user.email "Kingfinik98@gmail.com"
+
+      - name: Install build tools
+        run: |
+          sudo apt update && sudo apt upgrade -y
+          sudo apt install -y git curl repo build-essential bc bison flex libssl-dev \
+            libelf-dev python3 python3-pip unzip zip rsync lld openjdk-17-jdk
+
+      - name: Init & Sync GKI 6.1
+        run: |
+          mkdir gki && cd gki
+          repo init -u https://android.googlesource.com/kernel/manifest -b common-android14-6.1 --depth=1
+          repo sync -c --no-tags --no-clone-bundle --optimized-fetch -j8
+
+      - name: Update kernel source for GKI 6.1 (Rama Source)
+        run: |
+          cd gki/common
+          git remote add rama https://github.com/ramabondanp/android_kernel_common-6.1.git
+          git fetch -j12 rama
+          git checkout -b update-android14-6.1-lazygoogle rama/android14-6.1-lazygoogle
+
+      - name: Apply Snapdragon Performance Patch
+        if: github.event.inputs.performance_patch == 'Snapdragon'
+        working-directory: gki/common
+        run: |
+          TARGET="drivers/cpufreq/qcom-cpufreq-hw.c"
+          SRC_URL="https://raw.githubusercontent.com/Pzqqt/android_kernel_xiaomi_marble/refs/heads/melt-rebase/drivers/cpufreq/qcom-cpufreq-hw.c"
+          if [ -f "$TARGET" ]; then
+            curl -L "$SRC_URL" -o "$TARGET"
+            echo "✅ [Snapdragon] Patch applied."
+          else
+            echo "⚠️ [Snapdragon] Target not found, skipping."
+          fi
+
+      - name: Setup KernelSU (MamboSU / Next) & Hook Method
+        working-directory: gki/common
+        run: |
+          echo "🧩 Setup KernelSU"
+          
+          # 1. Remove existing KernelSU drivers
+          for KSU_PATH in drivers/staging/kernelsu drivers/kernelsu KernelSU; do
+            if [ -d $KSU_PATH ]; then
+              echo "Removing existing $KSU_PATH..."
+              KSU_DIR=$(dirname "$KSU_PATH")
+              [ -f "$KSU_DIR/Kconfig" ] && sed -i '/kernelsu/d' $KSU_DIR/Kconfig
+              [ -f "$KSU_DIR/Makefile" ] && sed -i '/kernelsu/d' $KSU_DIR/Makefile
+              rm -rf $KSU_PATH
+            fi
+          done
+          echo "✅ Cleaned up old drivers"
+          
+          # 2. Logic Setup berdasarkan input 'ksu_type'
+          KSU_TYPE="${{ github.event.inputs.ksu_type }}"
+          HOOK_METHOD="${{ github.event.inputs.hook_method }}"
+          
+          if [ "$KSU_TYPE" = "MamboSU" ]; then
+             echo "➡️ Mode: MamboSU (Rissu)"
+             
+             # Setup Source rsuntk
+             if [ "$HOOK_METHOD" = "susfs" ]; then
+                echo "   Branch: susfs-rksu-master"
+                curl -LSs "https://raw.githubusercontent.com/rsuntk/KernelSU/main/kernel/setup.sh" | bash -s susfs-rksu-master
+             else
+                echo "   Branch: master"
+                curl -LSs "https://raw.githubusercontent.com/rsuntk/KernelSU/main/kernel/setup.sh" | bash -s master
+             fi
+             
+             # Apply Manager Support Patch
+             echo "🛠️ Applying MamboSU Manager Support Patch..."
+             curl -LSs "https://raw.githubusercontent.com/Kingfinik98/gki-builder/15ddb8c469eab27491d5bb0f8f66b7fe2c15d0d7/kernel-patches/ksu/rksu-add-mambosu-manager-support.patch" -o /tmp/rksu_manager.patch
+             cd KernelSU
+             patch -p1 < /tmp/rksu_manager.patch
+             cd ..
+             echo "✅ MamboSU Manager Patch Applied"
+             
+             # Apply SusFS (Kernel Side - Simonpunk) HANYA jika MamboSU
+             if [ "$HOOK_METHOD" = "susfs" ]; then
+                echo "➡️ Applying SusFS (Simonpunk)..."
+                git clone https://gitlab.com/simonpunk/susfs4ksu/ -b gki-android14-6.1 sus
+                rm -rf sus/.git
+                susfs=sus/kernel_patches
+                cp -r $susfs/fs .
+                cp -r $susfs/include .
+                cp $susfs/50_add_susfs_in_gki-android14-6.1.patch .
+                patch -p1 -f -N < 50_add_susfs_in_gki-android14-6.1.patch || echo "Susfs rejects ignored"
+                # Fix header stat
+                sed -i '1i#include <linux/stat.h>' include/linux/susfs.h || true
+                echo "[✓] SUSFS patched"
+             fi
+
+          elif [ "$KSU_TYPE" = "Next" ]; then
+             echo "➡️ Mode: KernelSU-Next"
+             
+             # Setup Source pershoot/KernelSU-Next
+             # Patch SusFS Next terpisah dan sudah termasuk di branch dev-susfs
+             if [ "$HOOK_METHOD" = "susfs" ]; then
+                echo "   Branch: dev-susfs"
+                curl -LSs "https://raw.githubusercontent.com/pershoot/KernelSU-Next/refs/heads/dev-susfs/kernel/setup.sh" | bash -s dev-susfs
+             else
+                echo "   Branch: next"
+                curl -LSs "https://raw.githubusercontent.com/pershoot/KernelSU-Next/refs/heads/next/kernel/setup.sh" | bash -s next
+             fi
+             
+             echo "✅ KernelSU-Next added (Manager & SusFS built-in/patched separately)"
+          fi
+
+      - name: Inject All Kernel Configs
+        working-directory: gki/common
+        run: |
+          echo "⚙️ Injecting Kernel Configs..."
+          CONFIG_PATH="arch/arm64/configs/gki_defconfig"
+          KSU_TYPE="${{ github.event.inputs.ksu_type }}"
+          HOOK_METHOD="${{ github.event.inputs.hook_method }}"
+          PERFORMANCE_PATCH="${{ github.event.inputs.performance_patch }}"
+
+          # Base Configs
+          cat >> $CONFIG_PATH <<EOF
+          # BoltX Kernel Configs (GKI 6.1)
+          CONFIG_KSU=y
+          CONFIG_KPM=y
+          CONFIG_KPROBES=y
+          CONFIG_KPROBE_EVENTS=y
+          CONFIG_TMPFS_XATTR=y
+          CONFIG_TMPFS_POSIX_ACL=y
+          EOF
+
+          # SusFS Config
+          if [ "$HOOK_METHOD" = "susfs" ]; then
+            if [ "$KSU_TYPE" = "MamboSU" ]; then
+              # Config khusus MamboSU (Rissu)
+              cat >> $CONFIG_PATH <<EOF
+          CONFIG_KSU_SUSFS_SUS_SU=n
+          CONFIG_KSU_SYSCALL_HOOK=n
+          CONFIG_KSU_SUSFS=y
+          CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_PATH=y
+          CONFIG_KSU_SUSFS_SUS_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_KSTAT_SPOOF_GENERIC=y
+          CONFIG_KSU_SUSFS_SUS_KSTAT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSTAT=y
+          CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n
+          CONFIG_KSU_SUSFS_TRY_UMOUNT=n
+          CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=n
+          CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+          CONFIG_KSU_SUSFS_ENABLE_LOG=y
+          CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+          CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+          CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+          CONFIG_KSU_MANUAL_HOOK=n
+          CONFIG_KSU_HAS_MANUAL_HOOK=n
+          EOF
+            elif [ "$KSU_TYPE" = "Next" ]; then
+              # Config standar KernelSU-Next (SusFS)
+              cat >> $CONFIG_PATH <<EOF
+          CONFIG_KSU_SUSFS_SUS_SU=y
+          CONFIG_KSU_SYSCALL_HOOK=n
+          CONFIG_KSU_SUSFS=y
+          # Config SusFS Umount untuk 6.1 biasanya sudah support, kita coba y dulu atau n sesuai kebutuhan
+          CONFIG_KSU_SUSFS_TRY_UMOUNT=n
+          EOF
+            fi
+          else
+            cat >> $CONFIG_PATH <<EOF
+          CONFIG_KSU_SUSFS=n
+          CONFIG_KSU_MANUAL_HOOK=n
+          CONFIG_KSU_HAS_MANUAL_HOOK=n
+          EOF
+          fi
+
+          # Performance Tuning
+          if [ "$PERFORMANCE_PATCH" = "MediaTek" ]; then
+            echo "CONFIG_HZ=500" >> $CONFIG_PATH
+            echo "CONFIG_HZ_500=y" >> $CONFIG_PATH
+            echo "✅ [MediaTek] HZ=500 applied."
+          elif [ "$PERFORMANCE_PATCH" = "Universal" ]; then
+            echo "CONFIG_HZ_300=y" >> $CONFIG_PATH
+            echo "CONFIG_CPU_FREQ=y" >> $CONFIG_PATH
+            echo "CONFIG_HIGH_RES_TIMERS=y" >> $CONFIG_PATH
+            echo "✅ [Universal] Config applied."
+          fi
+
+      - name: Set Kernel Version (Localversion)
+        working-directory: gki/common
+        run: |
+          echo "" > scripts/setlocalversion
+          chmod +x scripts/setlocalversion
+          KERNEL_NAME_INPUT="${{ github.event.inputs.kernel_name }}"
+          KSU_TYPE="${{ github.event.inputs.ksu_type }}"
+          HOOK_METHOD="${{ github.event.inputs.hook_method }}"
+          PERFORMANCE_PATCH="${{ github.event.inputs.performance_patch }}"
+
+          SUFFIX=""
+          if [ -n "$KERNEL_NAME_INPUT" ]; then
+            SUFFIX="-$KERNEL_NAME_INPUT"
+          fi
+
+          # Suffix Variant
+          if [ "$KSU_TYPE" = "MamboSU" ]; then
+            SUFFIX="$SUFFIX-RKSU"
+          elif [ "$KSU_TYPE" = "Next" ]; then
+            SUFFIX="$SUFFIX-KSUN"
+          fi
+
+          if [ "$HOOK_METHOD" = "susfs" ]; then
+            SUFFIX="$SUFFIX-ඞ-SuS"
+          fi
+
+          if [ "$PERFORMANCE_PATCH" = "Snapdragon" ]; then
+            SUFFIX="$SUFFIX-Qcom"
+          elif [ "$PERFORMANCE_PATCH" = "MediaTek" ]; then
+            SUFFIX="$SUFFIX-Mtk"
+          elif [ "$PERFORMANCE_PATCH" = "Universal" ]; then
+            SUFFIX="$SUFFIX-Univ"
+          fi
+          
+          echo "Setting localversion: $SUFFIX"
+          echo "CONFIG_LOCALVERSION=\"$SUFFIX\"" >> $CONFIG_PATH
+          echo "CONFIG_LOCALVERSION_AUTO=n" >> $CONFIG_PATH
+          sed -i 's/echo "+"/# echo "+"/g' scripts/setlocalversion || true
+
+      - name: Setup Clang & Bazel Dependencies
+        working-directory: gki
+        run: |
+          echo "🔨 Setting up Clang..."
+          mkdir -p prebuilts-master/clang/host/linux-x86
+          if [ "${{ github.event.inputs.clang_version }}" == "r416183b (Clang 12)" ]; then
+            CLANG_VER="clang-r416183b"
+            CLANG_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android13-release/clang-r416183b.tar.gz"
+          elif [ "${{ github.event.inputs.clang_version }}" == "r536225 (Clang 19)" ]; then
+            CLANG_VER="clang-r536225"
+            CLANG_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main-kernel-2025/clang-r536225.tar.gz"
+          else
+            CLANG_VER="clang-r547379"
+            CLANG_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/62cdcefa89e31af2d72c366e8b5ef8db84caea62/clang-r547379.tar.gz"
+          fi
+          
+          mkdir -p prebuilts-master/clang/host/linux-x86/$CLANG_VER
+          cd prebuilts-master/clang/host/linux-x86
+          curl -L "${CLANG_URL}" | tar -xz -C $CLANG_VER
+          rm -rf clang-r416183b
+          ln -sf $CLANG_VER clang-r416183b
+          
+          echo "🔨 Setting up Bazel..."
+          curl -Lo /tmp/bazel https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64
+          chmod +x /tmp/bazel
+          mv /tmp/bazel /usr/local/bin/bazel
+
+      - name: Commit Changes
+        working-directory: gki/common
+        run: |
+          git add .
+          git commit -m "Final commit before Bazel build" || true
+
+      - name: Compile Kernel with Bazel
+        working-directory: gki
+        run: |
+          tools/bazel build --config=hermetic --config=fast //common:kernel_aarch64_dist
+
+      - name: Setup Environment Variables for Packaging
+        id: vars
+        run: |
+          LINUX_VERSION=$(make -s kernelversion -C gki/common | tr -d '\n\r')
+          echo "LINUX_VERSION=$LINUX_VERSION" >> $GITHUB_ENV
+          
+          CUSTOM_KERNEL_NAME="${{ github.event.inputs.kernel_name }}"
+          if [ -z "$CUSTOM_KERNEL_NAME" ]; then
+            KERNEL_NAME="BoltX"
+          else
+            KERNEL_NAME="$CUSTOM_KERNEL_NAME"
+          fi
+
+          KSU_TYPE="${{ github.event.inputs.ksu_type }}"
+          HOOK_METHOD="${{ github.event.inputs.hook_method }}"
+          STATUS="${{ github.event.inputs.release_status }}"
+          CLANG_VERSION_STRING="${{ github.event.inputs.clang_version }}"
+
+          if [ "$KSU_TYPE" = "MamboSU" ]; then
+            KSU_VARIANT="RKSU"
+          elif [ "$KSU_TYPE" = "Next" ]; then
+            KSU_VARIANT="KSUN"
+          fi
+
+          if [ "$HOOK_METHOD" = "susfs" ]; then
+            FULL_VARIANT="${KSU_VARIANT}-SusFS"
+          else
+            FULL_VARIANT="${KSU_VARIANT}-Kprobes"
+          fi
+
+          BUILD_DATE=$(date +"%Y%m%d")
+          KBUILD_BUILD_TIMESTAMP=$(date +"%Y-%m-%d %H:%M:%S %Z")
+          RELEASE="v${BUILD_DATE}"
+          
+          AK3_ZIP_NAME="AK3-${KERNEL_NAME}-${RELEASE}-6.1-${FULL_VARIANT}.zip"
+          
+          echo "KERNEL_NAME=$KERNEL_NAME" >> $GITHUB_ENV
+          echo "FULL_VARIANT=$FULL_VARIANT" >> $GITHUB_ENV
+          echo "STATUS=$STATUS" >> $GITHUB_ENV
+          echo "RELEASE=$RELEASE" >> $GITHUB_ENV
+          echo "AK3_ZIP_NAME=$AK3_ZIP_NAME" >> $GITHUB_ENV
+          echo "KBUILD_BUILD_TIMESTAMP=$KBUILD_BUILD_TIMESTAMP" >> $GITHUB_ENV
+          echo "KSU=${{ github.event.inputs.ksu_type }}" >> $GITHUB_ENV
+          echo "COMPILER_STRING=$CLANG_VERSION_STRING" >> $GITHUB_ENV
+
+      - name: Package Kernel (AnyKernel3)
+        run: |
+          echo "🚀 Starting kernel packaging process..."
+          ANYKERNEL_REPO="https://github.com/linastorvaldz/anykernel"
+          ANYKERNEL_BRANCH="android14-6.1"
+          KERNEL_IMAGE="gki/bazel-out/*/bin/common/kernel_aarch64_dist/Image"
+          
+          echo "🔽 Cloning anykernel from $ANYKERNEL_REPO"
+          git clone -q --depth=1 $ANYKERNEL_REPO -b $ANYKERNEL_BRANCH anykernel
+          
+          KERNEL_STRING="${{ env.LINUX_VERSION }}"
+          sed -i "s|kernel.string=.*|kernel.string=$KERNEL_STRING|g" anykernel/anykernel.sh
+
+          cd anykernel
+          echo "🗜️ Zipping anykernel..."
+          cp "$KERNEL_IMAGE" .
+          zip -r9 ../${{ env.AK3_ZIP_NAME }} ./*
+          cd ..
+          echo "✅ Zip file created: ${{ env.AK3_ZIP_NAME }}"
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          echo "🚀 Creating GitHub Release..."
+          GKI_RELEASES_REPO="https://github.com/Kingfinik98/Kernel-Release"
+          REPO_PATH=$(echo "$GKI_RELEASES_REPO" | sed 's|https://github.com/||')
+          RELEASE_TAG="${{ env.KERNEL_NAME }}-${{ env.LINUX_VERSION }}-${{ env.RELEASE }}"
+          RELEASE_NOTES="🐧 *Linux Version*: ${{ env.LINUX_VERSION }}
+          📅 *Build Date*: ${{ env.KBUILD_BUILD_TIMESTAMP }}
+          📛 *Type*: ${{ env.KSU }}
+          🔰 *Variant*: ${{ env.FULL_VARIANT }}
+          🔗 *Compiler*: ${{ env.COMPILER_STRING }}
+          💎 *KPM*: Enabled"
+          gh release create "$RELEASE_TAG" "${{ env.AK3_ZIP_NAME }}" \
+            --title "$RELEASE_TAG" \
+            --notes "$RELEASE_NOTES" \
+            --repo "$REPO_PATH" \
+            --latest
+          echo "✅ Release created successfully at https://github.com/$REPO_PATH/releases/tag/$RELEASE_TAG"
