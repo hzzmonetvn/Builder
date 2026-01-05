@@ -337,7 +337,7 @@ jobs:
       - name: Compile Kernel with Bazel
         working-directory: gki
         run: |
-          tools/bazel build --config=hermetic --config=fast //common:kernel_aarch64_dist
+          tools/bazel build --config=fast //common:kernel_aarch64_dist
 
       - name: Setup Environment Variables for Packaging
         id: vars
