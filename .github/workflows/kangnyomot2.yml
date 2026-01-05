@@ -122,18 +122,12 @@ jobs:
         run: |
           sed -i '2d' gki/common/build.config.gki
 
-      - name: Clone Patch Sources (gki-builder)
-        run: |
-          echo "📥 Cloning gki-builder for patches..."
-          git clone https://github.com/Kingfinik98/gki-builder -b main gki-builder
-          echo "✅ gki-builder cloned"
-
       - name: Setup MamboSU & Hook Method
         working-directory: gki/common
         run: |
           echo "🧩 Setup MamboSU (Rissu)"
           
-          # 1. Remove existing KernelSU drivers
+          # 1. Remove existing KernelSU drivers (Alur Asli)
           for KSU_PATH in drivers/staging/kernelsu drivers/kernelsu KernelSU; do
             if [ -d $KSU_PATH ]; then
               echo "MamboSU driver found in $KSU_PATH, Removing..."
@@ -145,32 +139,26 @@ jobs:
           done
           echo "✅ Existing MamboSU drivers removed"
           
-          # 2. Setup KernelSU
+          # 2. Setup KernelSU sesuai perintah setup.sh yang Anda berikan
           HOOK_METHOD="${{ github.event.inputs.hook_method }}"
           
           if [ "$HOOK_METHOD" = "susfs" ]; then
-             echo "➡️ Mode: SuSFS (Source: rsuntk/KernelSU/main -> Branch: susfs-rksu-master)"
+             echo "➡️ Mode: SuSFS (Using rsuntk/KernelSU setup -> branch susfs-rksu-master)"
              curl -LSs "https://raw.githubusercontent.com/rsuntk/KernelSU/main/kernel/setup.sh" | bash -s susfs-rksu-master
           else
-             echo "➡️ Mode: Kprobes/Rissu (Source: RapliVx/KernelSU/master -> Branch: master)"
+             echo "➡️ Mode: Kprobes/Rissu (Using RapliVx/KernelSU setup -> branch master)"
              curl -LSs "https://raw.githubusercontent.com/RapliVx/KernelSU/refs/heads/master/kernel/setup.sh" | bash -s master
           fi
           
-          # 3. Apply Manager Support Patch (Menggunakan file lokal dari gki-builder yang di-clone)
+          # 3. Apply Manager Support Patch (Langsung dari URL raw tanpa clone repo)
           echo "🛠️ Applying MamboSU Manager Support Patch..."
-          if [ -f "${GITHUB_WORKSPACE}/gki-builder/kernel-patches/ksu/rksu-add-mambosu-manager-support.patch" ]; then
-            patch -p1 < ${GITHUB_WORKSPACE}/gki-builder/kernel-patches/ksu/rksu-add-mambosu-manager-support.patch
-            echo "✅ Manager Patch Applied (Local)"
-          else
-            # Fallback ke curl jika file lokal tidak ada
-            curl -LSs "https://raw.githubusercontent.com/Kingfinik98/gki-builder/main/kernel-patches/ksu/rksu-add-mambosu-manager-support.patch" -o /tmp/rksu_manager.patch
-            cd KernelSU
-            patch -p1 < /tmp/rksu_manager.patch
-            cd ..
-            echo "✅ Manager Patch Applied (Remote)"
-          fi
+          curl -LSs "https://raw.githubusercontent.com/Kingfinik98/gki-builder/15ddb8c469eab27491d5bb0f8f66b7fe2c15d0d7/kernel-patches/ksu/rksu-add-mambosu-manager-support.patch" -o /tmp/rksu_manager.patch
+          cd KernelSU
+          patch -p1 < /tmp/rksu_manager.patch
+          cd ..
+          echo "✅ Manager Patch Applied"
           
-          # 4. Apply SusFS (Kernel Side)
+          # 4. Apply SusFS (Kernel Side) - Versi YAML Lama (Simonpunk)
           if [ "$HOOK_METHOD" = "susfs" ]; then
              echo "➡️ Applying SusFS Kernel Patches (Simonpunk)..."
              git clone https://gitlab.com/simonpunk/susfs4ksu/ -b gki-android12-5.10 sus
@@ -180,17 +168,6 @@ jobs:
              cp -r $susfs/include .
              cp -r $susfs/50_add_susfs_in_gki-android12-5.10.patch .
              patch -p1 < 50_add_susfs_in_gki-android12-5.10.patch
-             
-             # 5. Apply SusFS Fixes (Sesuai logika build.sh jika ada patch khusus 5.10 di gki-builder)
-             # Logika script: if LINUX_VERSION_CODE == 5.10 (tidak ada blok khusus di ref script, tapi kita coba patch umum SusFS jika ada)
-             # Biasanya susfs v2.0 di kernel 5.10 butuh backport fungsi.
-             # Jika ada patch fix di repo gki-builder, kita apply.
-             PATCH_DIR="${GITHUB_WORKSPACE}/gki-builder/kernel-patches/susfs"
-             if [ -d "$PATCH_DIR" ]; then
-                echo "Applying additional SusFS fixes from gki-builder..."
-                # Loop patch files jika ada (opsional, sesuaikan kebutuhan)
-                # find $PATCH_DIR -name "*.patch" -exec patch -p1 < {} \;
-             fi
              echo "[✓] SUSFS patched"
           fi
           
@@ -322,6 +299,7 @@ jobs:
           HOOK_METHOD="${{ github.event.inputs.hook_method }}"
           PERFORMANCE_PATCH="${{ github.event.inputs.performance_patch }}"
 
+          # --- PERUBAHAN UTAMA: MEMBANGUN VERSI SESUAI CONTOH ---
           SUFFIX=""
           if [ -n "$KERNEL_NAME_INPUT" ]; then
             SUFFIX="-$KERNEL_NAME_INPUT"
@@ -378,9 +356,11 @@ jobs:
       - name: Setup Environment Variables for Packaging
         id: vars
         run: |
+          # Ambil versi DASAR kernel
           BASE_LINUX_VERSION=$(make -s kernelversion -C gki/common | tr -d '\n\r')
           echo "BASE_LINUX_VERSION=$BASE_LINUX_VERSION" >> $GITHUB_ENV
           
+          # Ambil versi LENGKAP kernel (dengan suffix)
           LINUX_VERSION=$(make -s kernelversion -C gki/common | tr -d '\n\r')
           echo "LINUX_VERSION=$LINUX_VERSION" >> $GITHUB_ENV
           
@@ -395,6 +375,7 @@ jobs:
           STATUS="${{ github.event.inputs.release_status }}"
           CLANG_VERSION_STRING="${{ github.event.inputs.clang_version }}"
 
+          # Tentukan nama Varian untuk nama file zip
           if [ "$HOOK_METHOD" = "susfs" ]; then
             VARIANT="SusFS"
           else
@@ -405,6 +386,7 @@ jobs:
           KBUILD_BUILD_TIMESTAMP=$(date +"%Y-%m-%d %H:%M:%S %Z")
           RELEASE="v${BUILD_DATE}"
           
+          # --- PERUBAHAN NAMA FILE ZIP LEBIH RAPI ---
           AK3_ZIP_NAME="AK3-${KERNEL_NAME}-${RELEASE}-${BASE_LINUX_VERSION}-${VARIANT}.zip"
           
           echo "KERNEL_NAME=$KERNEL_NAME" >> $GITHUB_ENV
@@ -426,6 +408,7 @@ jobs:
           echo "🔽 Cloning anykernel from $ANYKERNEL_REPO"
           git clone -q --depth=1 $ANYKERNEL_REPO -b $ANYKERNEL_BRANCH anykernel
           
+          # --- PERUBAHAN: GUNAKAN VERSI LENGKAP UNTUK KERNEL STRING ---
           KERNEL_STRING="${{ env.LINUX_VERSION }}"
           sed -i "s|kernel.string=.*|kernel.string=$KERNEL_STRING|g" anykernel/anykernel.sh
 
