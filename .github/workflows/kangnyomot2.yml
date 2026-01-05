@@ -211,7 +211,7 @@ jobs:
           # ===============================================
           # Konfigurasi KSU NEXT (Base)
           CONFIG_KSU=y
-          CONFIG_KPM=n
+          CONFIG_KPM=y
           CONFIG_KSU_SUSFS_SUS_SU=n
           CONFIG_KSU_SYSCALL_HOOK=n
           CONFIG_KPROBES=y
