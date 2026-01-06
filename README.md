@@ -1,11 +1,22 @@
-you guys fork here, please give credit, because fixing bugs is very difficult 
-don't admit that you are the one who coded this yml,
-# fixed bug by @BoltXNext
-Credits:
+## Fork & Credit Notice
 
-- Thanks to several community kernel developers for conceptual references and ideas.
-- All implementations were written from scratch specifically for this kernel build (not copied from any source).
-Please respect upstream developers and always give proper credits when forking or reusing sources.
-Special thanks:
-- @iambouttacum — for conceptual inspiration and development references.
-- @ramabondanp — for conceptual inspiration and development references.
+If you fork this repository, please provide proper credit to the original source.
+
+Fixing bugs and maintaining this kernel build requires significant time and effort.  
+Do **not** claim that you are the author of the GitHub Actions / YML scripts or this kernel build.
+
+### Bug Fixes
+- Fixed and maintained by **@BoltXNext**
+
+---
+
+## Credits
+
+- Thanks to several kernel community developers for conceptual references and ideas.
+- All implementations in this repository were written and adapted specifically for this kernel build (not copied directly from other sources).
+
+Please respect upstream developers and always give proper credit when forking or reusing any source.
+
+### Special Thanks
+- **@iambouttacum** — conceptual inspiration and development references  
+- **@ramabondanp** — conceptual inspiration and development references
