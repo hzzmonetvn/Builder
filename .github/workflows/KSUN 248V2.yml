@@ -1,4 +1,4 @@
-name: BoltX KSUN 248 V2
+name: BoltX KSUN V2
 
 on:
   workflow_dispatch:
@@ -81,7 +81,7 @@ jobs:
           repo init -u https://android.googlesource.com/kernel/manifest -b common-android12-5.10 --depth=1
           repo sync -c --no-tags --no-clone-bundle --optimized-fetch -j$(nproc --all)
 
-     - name: Update kernel source for GKI 5.10
+      - name: Update kernel source for GKI 5.10
         run: |
           cd gki/common
           git remote add rama https://github.com/ramabondanp/android_kernel_common-5.10.git
