@@ -247,7 +247,7 @@ jobs:
           fi
 
           # Karena selalu menggunakan SUSFS, suffix ini tetap dipakai
-          SUFFIX="$SUFFIX-ඞ-SuS"
+          # SUFFIX="$SUFFIX-ඞ-SuS"
 
           if [ "$PERFORMANCE_PATCH" = "Snapdragon" ]; then
             SUFFIX="$SUFFIX-Qcom"
