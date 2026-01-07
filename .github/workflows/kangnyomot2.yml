@@ -305,9 +305,9 @@ jobs:
             SUFFIX="-$KERNEL_NAME_INPUT"
           fi
 
-          if [ "$HOOK_METHOD" = "susfs" ]; then
-            SUFFIX="$SUFFIX-ඞ-SuS"
-          fi
+          # if [ "$HOOK_METHOD" = "susfs" ]; then
+          #   SUFFIX="$SUFFIX-ඞ-SuS"
+          # fi
 
           if [ "$PERFORMANCE_PATCH" = "Snapdragon" ]; then
             SUFFIX="$SUFFIX-Qcom"
