@@ -358,7 +358,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           echo "🚀 Creating GitHub Release..."
-          GKI_RELEASES_REPO="https://github.com/Kingfinik98/Kernel-Release"
+          GKI_RELEASES_REPO="https://github.com/hzzmonetvn/Builder"
           REPO_PATH=$(echo "$GKI_RELEASES_REPO" | sed 's|https://github.com/||')
           RELEASE_TAG="${{ env.KERNEL_NAME }}-${{ env.LINUX_VERSION }}-${{ env.RELEASE }}"
           RELEASE_NOTES="🐧 *Linux Version*: ${{ env.LINUX_VERSION }}
